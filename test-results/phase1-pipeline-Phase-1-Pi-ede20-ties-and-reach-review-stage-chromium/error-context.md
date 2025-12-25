@@ -1,0 +1,465 @@
+# Page snapshot
+
+```yaml
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - heading "Section 8 BRRRR Analyzer" [level=1] [ref=e6]
+        - paragraph [ref=e7]: Automate your property deal analysis pipeline
+      - generic [ref=e8]:
+        - link "⚙️ Settings" [ref=e9] [cursor=pointer]:
+          - /url: /settings
+        - button "📤 Upload PDF" [ref=e10] [cursor=pointer]
+    - generic [ref=e12]:
+      - button "✕ Close" [ref=e13]
+      - generic [ref=e14]:
+        - generic [ref=e15]:
+          - heading "✅ Extraction Complete" [level=2] [ref=e16]
+          - generic [ref=e17]: Step 4 of 4
+        - generic [ref=e18]:
+          - generic [ref=e19]:
+            - generic [ref=e20]: ✓
+            - heading "Extraction Complete" [level=3] [ref=e21]
+            - generic [ref=e22]:
+              - text: "7"
+              - paragraph [ref=e23]: Total Properties Found
+          - generic [ref=e24]: You can now review the raw data and adjust filtering criteria on the next page.
+          - generic [ref=e25]:
+            - button "Upload Another" [ref=e26] [cursor=pointer]
+            - link "Review & Analyze →" [ref=e27] [cursor=pointer]:
+              - /url: /run/6ea66652-f286-4db3-9c8a-1f8b7a30a928
+    - generic [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e30]: "31"
+        - generic [ref=e31]: Total Runs
+      - generic [ref=e32]:
+        - generic [ref=e33]: "39"
+        - generic [ref=e34]: Properties Analyzed
+      - generic [ref=e35]:
+        - generic [ref=e36]: "0"
+        - generic [ref=e37]: Top Deals Found
+      - generic [ref=e38]:
+        - generic [ref=e39]: "3"
+        - generic [ref=e40]: Completed Runs
+    - generic [ref=e41]:
+      - generic [ref=e42]:
+        - heading "📁 Recent Runs" [level=2] [ref=e43]
+        - button "🔄 Refresh" [ref=e44] [cursor=pointer]
+      - table [ref=e45]:
+        - rowgroup [ref=e46]:
+          - row "File Status Properties Top Deals Date" [ref=e47]:
+            - columnheader "File" [ref=e48]
+            - columnheader "Status" [ref=e49]
+            - columnheader "Properties" [ref=e50]
+            - columnheader "Top Deals" [ref=e51]
+            - columnheader "Date" [ref=e52]
+            - columnheader [ref=e53]
+        - rowgroup [ref=e54]:
+          - row "📄 Section8List12_19_25.pdf ❌ Failed 14 - Dec 21, 2025, 03:04 AM View →" [ref=e55]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e56]:
+              - generic [ref=e57]:
+                - generic [ref=e58]: 📄
+                - generic [ref=e59]: Section8List12_19_25.pdf
+            - cell "❌ Failed" [ref=e60]:
+              - generic [ref=e61]: ❌ Failed
+            - cell "14" [ref=e62]
+            - cell "-" [ref=e63]
+            - cell "Dec 21, 2025, 03:04 AM" [ref=e64]
+            - cell "View →" [ref=e65]:
+              - link "View →" [ref=e66] [cursor=pointer]:
+                - /url: /run/3495e325-2b57-42d0-8ad3-6b4519ecd65c
+          - row "📄 Section8List12_19_25.pdf waiting-for-review 17 - Dec 21, 2025, 02:48 AM View →" [ref=e67]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e68]:
+              - generic [ref=e69]:
+                - generic [ref=e70]: 📄
+                - generic [ref=e71]: Section8List12_19_25.pdf
+            - cell "waiting-for-review" [ref=e72]:
+              - generic [ref=e73]: waiting-for-review
+            - cell "17" [ref=e74]
+            - cell "-" [ref=e75]
+            - cell "Dec 21, 2025, 02:48 AM" [ref=e76]
+            - cell "View →" [ref=e77]:
+              - link "View →" [ref=e78] [cursor=pointer]:
+                - /url: /run/52551a96-d0a3-40b4-94c3-edd2000bac6c
+          - row "📄 Section8List12_19_25.pdf extracting 0 - Dec 21, 2025, 02:37 AM View →" [ref=e79]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e80]:
+              - generic [ref=e81]:
+                - generic [ref=e82]: 📄
+                - generic [ref=e83]: Section8List12_19_25.pdf
+            - cell "extracting" [ref=e84]:
+              - generic [ref=e85]: extracting
+            - cell "0" [ref=e86]
+            - cell "-" [ref=e87]
+            - cell "Dec 21, 2025, 02:37 AM" [ref=e88]
+            - cell "View →" [ref=e89]:
+              - link "View →" [ref=e90] [cursor=pointer]:
+                - /url: /run/3feac6d6-a315-49f6-8947-d9afdb1fda75
+          - row "📄 Section8List12_19_25.pdf waiting-for-review 0 - Dec 21, 2025, 02:12 AM View →" [ref=e91]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e92]:
+              - generic [ref=e93]:
+                - generic [ref=e94]: 📄
+                - generic [ref=e95]: Section8List12_19_25.pdf
+            - cell "waiting-for-review" [ref=e96]:
+              - generic [ref=e97]: waiting-for-review
+            - cell "0" [ref=e98]
+            - cell "-" [ref=e99]
+            - cell "Dec 21, 2025, 02:12 AM" [ref=e100]
+            - cell "View →" [ref=e101]:
+              - link "View →" [ref=e102] [cursor=pointer]:
+                - /url: /run/24ec6255-bdb1-462c-941e-0a099d654084
+          - row "📄 Section8List12_19_25.pdf extracting - - Dec 21, 2025, 02:01 AM View →" [ref=e103]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e104]:
+              - generic [ref=e105]:
+                - generic [ref=e106]: 📄
+                - generic [ref=e107]: Section8List12_19_25.pdf
+            - cell "extracting" [ref=e108]:
+              - generic [ref=e109]: extracting
+            - cell "-" [ref=e110]
+            - cell "-" [ref=e111]
+            - cell "Dec 21, 2025, 02:01 AM" [ref=e112]
+            - cell "View →" [ref=e113]:
+              - link "View →" [ref=e114] [cursor=pointer]:
+                - /url: /run/4f77bfce-af72-4896-80a1-d475da066e48
+          - row "📄 test-section8.pdf extracting - - Dec 21, 2025, 01:53 AM View →" [ref=e115]:
+            - cell "📄 test-section8.pdf" [ref=e116]:
+              - generic [ref=e117]:
+                - generic [ref=e118]: 📄
+                - generic [ref=e119]: test-section8.pdf
+            - cell "extracting" [ref=e120]:
+              - generic [ref=e121]: extracting
+            - cell "-" [ref=e122]
+            - cell "-" [ref=e123]
+            - cell "Dec 21, 2025, 01:53 AM" [ref=e124]
+            - cell "View →" [ref=e125]:
+              - link "View →" [ref=e126] [cursor=pointer]:
+                - /url: /run/ea81e1bf-137c-4cd0-8c03-f42f192939d4
+          - row "📄 test-section8.pdf waiting-for-review 4 - Dec 21, 2025, 01:53 AM View →" [ref=e127]:
+            - cell "📄 test-section8.pdf" [ref=e128]:
+              - generic [ref=e129]:
+                - generic [ref=e130]: 📄
+                - generic [ref=e131]: test-section8.pdf
+            - cell "waiting-for-review" [ref=e132]:
+              - generic [ref=e133]: waiting-for-review
+            - cell "4" [ref=e134]
+            - cell "-" [ref=e135]
+            - cell "Dec 21, 2025, 01:53 AM" [ref=e136]
+            - cell "View →" [ref=e137]:
+              - link "View →" [ref=e138] [cursor=pointer]:
+                - /url: /run/be40d4b4-ce34-472d-8d3e-f2127034c362
+          - row "📄 test-section8.pdf waiting-for-review 4 - Dec 21, 2025, 01:47 AM View →" [ref=e139]:
+            - cell "📄 test-section8.pdf" [ref=e140]:
+              - generic [ref=e141]:
+                - generic [ref=e142]: 📄
+                - generic [ref=e143]: test-section8.pdf
+            - cell "waiting-for-review" [ref=e144]:
+              - generic [ref=e145]: waiting-for-review
+            - cell "4" [ref=e146]
+            - cell "-" [ref=e147]
+            - cell "Dec 21, 2025, 01:47 AM" [ref=e148]
+            - cell "View →" [ref=e149]:
+              - link "View →" [ref=e150] [cursor=pointer]:
+                - /url: /run/17454877-516b-453a-ae84-84d842e449db
+          - row "📄 test-section8.pdf extracting - - Dec 21, 2025, 01:37 AM View →" [ref=e151]:
+            - cell "📄 test-section8.pdf" [ref=e152]:
+              - generic [ref=e153]:
+                - generic [ref=e154]: 📄
+                - generic [ref=e155]: test-section8.pdf
+            - cell "extracting" [ref=e156]:
+              - generic [ref=e157]: extracting
+            - cell "-" [ref=e158]
+            - cell "-" [ref=e159]
+            - cell "Dec 21, 2025, 01:37 AM" [ref=e160]
+            - cell "View →" [ref=e161]:
+              - link "View →" [ref=e162] [cursor=pointer]:
+                - /url: /run/bd767f39-3f1c-4f3f-96ed-23c7e063c516
+          - row "📄 test-section8.pdf extracting - - Dec 21, 2025, 01:30 AM View →" [ref=e163]:
+            - cell "📄 test-section8.pdf" [ref=e164]:
+              - generic [ref=e165]:
+                - generic [ref=e166]: 📄
+                - generic [ref=e167]: test-section8.pdf
+            - cell "extracting" [ref=e168]:
+              - generic [ref=e169]: extracting
+            - cell "-" [ref=e170]
+            - cell "-" [ref=e171]
+            - cell "Dec 21, 2025, 01:30 AM" [ref=e172]
+            - cell "View →" [ref=e173]:
+              - link "View →" [ref=e174] [cursor=pointer]:
+                - /url: /run/04f6b241-4062-4719-a280-a1140751f910
+          - row "📄 test-section8.pdf extracting - - Dec 21, 2025, 01:06 AM View →" [ref=e175]:
+            - cell "📄 test-section8.pdf" [ref=e176]:
+              - generic [ref=e177]:
+                - generic [ref=e178]: 📄
+                - generic [ref=e179]: test-section8.pdf
+            - cell "extracting" [ref=e180]:
+              - generic [ref=e181]: extracting
+            - cell "-" [ref=e182]
+            - cell "-" [ref=e183]
+            - cell "Dec 21, 2025, 01:06 AM" [ref=e184]
+            - cell "View →" [ref=e185]:
+              - link "View →" [ref=e186] [cursor=pointer]:
+                - /url: /run/00574fab-8a69-43e6-a38d-9462bacaf4f2
+          - row "📄 test-section8.pdf extracting - - Dec 21, 2025, 01:03 AM View →" [ref=e187]:
+            - cell "📄 test-section8.pdf" [ref=e188]:
+              - generic [ref=e189]:
+                - generic [ref=e190]: 📄
+                - generic [ref=e191]: test-section8.pdf
+            - cell "extracting" [ref=e192]:
+              - generic [ref=e193]: extracting
+            - cell "-" [ref=e194]
+            - cell "-" [ref=e195]
+            - cell "Dec 21, 2025, 01:03 AM" [ref=e196]
+            - cell "View →" [ref=e197]:
+              - link "View →" [ref=e198] [cursor=pointer]:
+                - /url: /run/7ac068e4-8773-402a-b0d1-2b379835da00
+          - row "📄 Section8List12_19_25.pdf extracting - - Dec 21, 2025, 12:47 AM View →" [ref=e199]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e200]:
+              - generic [ref=e201]:
+                - generic [ref=e202]: 📄
+                - generic [ref=e203]: Section8List12_19_25.pdf
+            - cell "extracting" [ref=e204]:
+              - generic [ref=e205]: extracting
+            - cell "-" [ref=e206]
+            - cell "-" [ref=e207]
+            - cell "Dec 21, 2025, 12:47 AM" [ref=e208]
+            - cell "View →" [ref=e209]:
+              - link "View →" [ref=e210] [cursor=pointer]:
+                - /url: /run/cf7b8c34-be85-4c3e-b689-744060ec5cb9
+          - row "📄 Section8List12_19_25.pdf extracting - - Dec 21, 2025, 12:40 AM View →" [ref=e211]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e212]:
+              - generic [ref=e213]:
+                - generic [ref=e214]: 📄
+                - generic [ref=e215]: Section8List12_19_25.pdf
+            - cell "extracting" [ref=e216]:
+              - generic [ref=e217]: extracting
+            - cell "-" [ref=e218]
+            - cell "-" [ref=e219]
+            - cell "Dec 21, 2025, 12:40 AM" [ref=e220]
+            - cell "View →" [ref=e221]:
+              - link "View →" [ref=e222] [cursor=pointer]:
+                - /url: /run/69dc91e1-56c3-491d-8589-edfa4852e00c
+          - row "📄 Section8List12_19_25.pdf ⏳ Pending - - Dec 21, 2025, 12:34 AM View →" [ref=e223]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e224]:
+              - generic [ref=e225]:
+                - generic [ref=e226]: 📄
+                - generic [ref=e227]: Section8List12_19_25.pdf
+            - cell "⏳ Pending" [ref=e228]:
+              - generic [ref=e229]: ⏳ Pending
+            - cell "-" [ref=e230]
+            - cell "-" [ref=e231]
+            - cell "Dec 21, 2025, 12:34 AM" [ref=e232]
+            - cell "View →" [ref=e233]:
+              - link "View →" [ref=e234] [cursor=pointer]:
+                - /url: /run/e1c7b861-2d05-4c4c-9ec9-6f1e2798e31d
+          - row "📄 Section8List12_19_25.pdf ⏳ Pending - - Dec 21, 2025, 12:12 AM View →" [ref=e235]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e236]:
+              - generic [ref=e237]:
+                - generic [ref=e238]: 📄
+                - generic [ref=e239]: Section8List12_19_25.pdf
+            - cell "⏳ Pending" [ref=e240]:
+              - generic [ref=e241]: ⏳ Pending
+            - cell "-" [ref=e242]
+            - cell "-" [ref=e243]
+            - cell "Dec 21, 2025, 12:12 AM" [ref=e244]
+            - cell "View →" [ref=e245]:
+              - link "View →" [ref=e246] [cursor=pointer]:
+                - /url: /run/71433e1c-07a0-48c2-a3d5-a94fbc5f9a38
+          - row "📄 Section8List12_19_25.pdf ⏳ Pending - - Dec 20, 2025, 11:25 PM View →" [ref=e247]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e248]:
+              - generic [ref=e249]:
+                - generic [ref=e250]: 📄
+                - generic [ref=e251]: Section8List12_19_25.pdf
+            - cell "⏳ Pending" [ref=e252]:
+              - generic [ref=e253]: ⏳ Pending
+            - cell "-" [ref=e254]
+            - cell "-" [ref=e255]
+            - cell "Dec 20, 2025, 11:25 PM" [ref=e256]
+            - cell "View →" [ref=e257]:
+              - link "View →" [ref=e258] [cursor=pointer]:
+                - /url: /run/3aa4ccaf-f4bb-46e8-8a25-e746fcea2cc5
+          - row "📄 demo.pdf ⏳ Pending - - Dec 20, 2025, 11:08 PM View →" [ref=e259]:
+            - cell "📄 demo.pdf" [ref=e260]:
+              - generic [ref=e261]:
+                - generic [ref=e262]: 📄
+                - generic [ref=e263]: demo.pdf
+            - cell "⏳ Pending" [ref=e264]:
+              - generic [ref=e265]: ⏳ Pending
+            - cell "-" [ref=e266]
+            - cell "-" [ref=e267]
+            - cell "Dec 20, 2025, 11:08 PM" [ref=e268]
+            - cell "View →" [ref=e269]:
+              - link "View →" [ref=e270] [cursor=pointer]:
+                - /url: /run/572ca8a6-65f9-4524-be88-a5aa33224de2
+          - row "📄 demo-real-test.pdf ⏳ Pending - - Dec 20, 2025, 10:59 PM View →" [ref=e271]:
+            - cell "📄 demo-real-test.pdf" [ref=e272]:
+              - generic [ref=e273]:
+                - generic [ref=e274]: 📄
+                - generic [ref=e275]: demo-real-test.pdf
+            - cell "⏳ Pending" [ref=e276]:
+              - generic [ref=e277]: ⏳ Pending
+            - cell "-" [ref=e278]
+            - cell "-" [ref=e279]
+            - cell "Dec 20, 2025, 10:59 PM" [ref=e280]
+            - cell "View →" [ref=e281]:
+              - link "View →" [ref=e282] [cursor=pointer]:
+                - /url: /run/bbb44baf-2787-46d2-bbf4-423e56789da6
+          - row "📄 demo.pdf ⏳ Pending - - Dec 20, 2025, 10:54 PM View →" [ref=e283]:
+            - cell "📄 demo.pdf" [ref=e284]:
+              - generic [ref=e285]:
+                - generic [ref=e286]: 📄
+                - generic [ref=e287]: demo.pdf
+            - cell "⏳ Pending" [ref=e288]:
+              - generic [ref=e289]: ⏳ Pending
+            - cell "-" [ref=e290]
+            - cell "-" [ref=e291]
+            - cell "Dec 20, 2025, 10:54 PM" [ref=e292]
+            - cell "View →" [ref=e293]:
+              - link "View →" [ref=e294] [cursor=pointer]:
+                - /url: /run/24cf896c-618f-4026-b7f5-11d6cf3d2329
+          - row "📄 Section8List12_19_25.pdf extracting - - Dec 20, 2025, 10:47 PM View →" [ref=e295]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e296]:
+              - generic [ref=e297]:
+                - generic [ref=e298]: 📄
+                - generic [ref=e299]: Section8List12_19_25.pdf
+            - cell "extracting" [ref=e300]:
+              - generic [ref=e301]: extracting
+            - cell "-" [ref=e302]
+            - cell "-" [ref=e303]
+            - cell "Dec 20, 2025, 10:47 PM" [ref=e304]
+            - cell "View →" [ref=e305]:
+              - link "View →" [ref=e306] [cursor=pointer]:
+                - /url: /run/531493c6-a04f-4c80-bf25-a58f1f949da8
+          - row "📄 Section8List12_19_25.pdf extracting - - Dec 20, 2025, 10:45 PM View →" [ref=e307]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e308]:
+              - generic [ref=e309]:
+                - generic [ref=e310]: 📄
+                - generic [ref=e311]: Section8List12_19_25.pdf
+            - cell "extracting" [ref=e312]:
+              - generic [ref=e313]: extracting
+            - cell "-" [ref=e314]
+            - cell "-" [ref=e315]
+            - cell "Dec 20, 2025, 10:45 PM" [ref=e316]
+            - cell "View →" [ref=e317]:
+              - link "View →" [ref=e318] [cursor=pointer]:
+                - /url: /run/cafd5168-9eea-4104-8e5d-a66b76eac27f
+          - row "📄 test3.pdf ✅ Complete 0 0 Dec 20, 2025, 10:44 PM View →" [ref=e319]:
+            - cell "📄 test3.pdf" [ref=e320]:
+              - generic [ref=e321]:
+                - generic [ref=e322]: 📄
+                - generic [ref=e323]: test3.pdf
+            - cell "✅ Complete" [ref=e324]:
+              - generic [ref=e325]: ✅ Complete
+            - cell "0" [ref=e326]
+            - cell "0" [ref=e327]
+            - cell "Dec 20, 2025, 10:44 PM" [ref=e328]
+            - cell "View →" [ref=e329]:
+              - link "View →" [ref=e330] [cursor=pointer]:
+                - /url: /run/f4a8fe80-120a-46fc-8ab2-85b50a38e40d
+          - row "📄 test2.pdf waiting-for-review 0 - Dec 20, 2025, 10:43 PM View →" [ref=e331]:
+            - cell "📄 test2.pdf" [ref=e332]:
+              - generic [ref=e333]:
+                - generic [ref=e334]: 📄
+                - generic [ref=e335]: test2.pdf
+            - cell "waiting-for-review" [ref=e336]:
+              - generic [ref=e337]: waiting-for-review
+            - cell "0" [ref=e338]
+            - cell "-" [ref=e339]
+            - cell "Dec 20, 2025, 10:43 PM" [ref=e340]
+            - cell "View →" [ref=e341]:
+              - link "View →" [ref=e342] [cursor=pointer]:
+                - /url: /run/043e9d94-6a99-404b-a4bf-11b9c0f0e177
+          - row "📄 test.pdf extracting - - Dec 20, 2025, 10:42 PM View →" [ref=e343]:
+            - cell "📄 test.pdf" [ref=e344]:
+              - generic [ref=e345]:
+                - generic [ref=e346]: 📄
+                - generic [ref=e347]: test.pdf
+            - cell "extracting" [ref=e348]:
+              - generic [ref=e349]: extracting
+            - cell "-" [ref=e350]
+            - cell "-" [ref=e351]
+            - cell "Dec 20, 2025, 10:42 PM" [ref=e352]
+            - cell "View →" [ref=e353]:
+              - link "View →" [ref=e354] [cursor=pointer]:
+                - /url: /run/653b71f6-419c-4bce-9ae1-74a9dab7aab4
+          - row "📄 Section8List12_19_25.pdf extracting - - Dec 20, 2025, 10:34 PM View →" [ref=e355]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e356]:
+              - generic [ref=e357]:
+                - generic [ref=e358]: 📄
+                - generic [ref=e359]: Section8List12_19_25.pdf
+            - cell "extracting" [ref=e360]:
+              - generic [ref=e361]: extracting
+            - cell "-" [ref=e362]
+            - cell "-" [ref=e363]
+            - cell "Dec 20, 2025, 10:34 PM" [ref=e364]
+            - cell "View →" [ref=e365]:
+              - link "View →" [ref=e366] [cursor=pointer]:
+                - /url: /run/e7a451bf-eb9e-4d41-a0fe-d88f5d68afbc
+          - row "📄 test-real.pdf ✅ Complete 0 0 Dec 20, 2025, 10:23 PM View →" [ref=e367]:
+            - cell "📄 test-real.pdf" [ref=e368]:
+              - generic [ref=e369]:
+                - generic [ref=e370]: 📄
+                - generic [ref=e371]: test-real.pdf
+            - cell "✅ Complete" [ref=e372]:
+              - generic [ref=e373]: ✅ Complete
+            - cell "0" [ref=e374]
+            - cell "0" [ref=e375]
+            - cell "Dec 20, 2025, 10:23 PM" [ref=e376]
+            - cell "View →" [ref=e377]:
+              - link "View →" [ref=e378] [cursor=pointer]:
+                - /url: /run/224ac450-4c80-49d8-ab6c-c20c9646a414
+          - row "📄 test.pdf waiting-for-review 0 - Dec 20, 2025, 10:21 PM View →" [ref=e379]:
+            - cell "📄 test.pdf" [ref=e380]:
+              - generic [ref=e381]:
+                - generic [ref=e382]: 📄
+                - generic [ref=e383]: test.pdf
+            - cell "waiting-for-review" [ref=e384]:
+              - generic [ref=e385]: waiting-for-review
+            - cell "0" [ref=e386]
+            - cell "-" [ref=e387]
+            - cell "Dec 20, 2025, 10:21 PM" [ref=e388]
+            - cell "View →" [ref=e389]:
+              - link "View →" [ref=e390] [cursor=pointer]:
+                - /url: /run/d9ff145d-a337-47a8-b271-716dd1bb684d
+          - row "📄 Section8List12_19_25.pdf extracting - - Dec 20, 2025, 10:16 PM View →" [ref=e391]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e392]:
+              - generic [ref=e393]:
+                - generic [ref=e394]: 📄
+                - generic [ref=e395]: Section8List12_19_25.pdf
+            - cell "extracting" [ref=e396]:
+              - generic [ref=e397]: extracting
+            - cell "-" [ref=e398]
+            - cell "-" [ref=e399]
+            - cell "Dec 20, 2025, 10:16 PM" [ref=e400]
+            - cell "View →" [ref=e401]:
+              - link "View →" [ref=e402] [cursor=pointer]:
+                - /url: /run/28a0fd27-cf9e-4d24-83e0-d7c703196917
+          - row "📄 Section8List12_19_25.pdf extracting - - Dec 20, 2025, 09:53 PM View →" [ref=e403]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e404]:
+              - generic [ref=e405]:
+                - generic [ref=e406]: 📄
+                - generic [ref=e407]: Section8List12_19_25.pdf
+            - cell "extracting" [ref=e408]:
+              - generic [ref=e409]: extracting
+            - cell "-" [ref=e410]
+            - cell "-" [ref=e411]
+            - cell "Dec 20, 2025, 09:53 PM" [ref=e412]
+            - cell "View →" [ref=e413]:
+              - link "View →" [ref=e414] [cursor=pointer]:
+                - /url: /run/5eb0fbb9-803d-4da9-9879-bb235fb246e4
+          - row "📄 Section8List12_19_25.pdf ✅ Complete 0 - Dec 20, 2025, 09:36 PM View →" [ref=e415]:
+            - cell "📄 Section8List12_19_25.pdf" [ref=e416]:
+              - generic [ref=e417]:
+                - generic [ref=e418]: 📄
+                - generic [ref=e419]: Section8List12_19_25.pdf
+            - cell "✅ Complete" [ref=e420]:
+              - generic [ref=e421]: ✅ Complete
+            - cell "0" [ref=e422]
+            - cell "-" [ref=e423]
+            - cell "Dec 20, 2025, 09:36 PM" [ref=e424]
+            - cell "View →" [ref=e425]:
+              - link "View →" [ref=e426] [cursor=pointer]:
+                - /url: /run/15c7ddf3-8560-405c-b92d-792edeb0060c
+  - button "Open Next.js Dev Tools" [ref=e432] [cursor=pointer]:
+    - img [ref=e433]
+  - alert [ref=e436]
+```

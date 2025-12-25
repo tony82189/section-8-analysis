@@ -26,6 +26,7 @@ interface Settings {
     topN: number;
     sheetsEnabled: boolean;
     spreadsheetId?: string;
+    marketStatusEnabled: boolean;
 }
 
 export default function SettingsPage() {
@@ -203,6 +204,26 @@ export default function SettingsPage() {
                                 className={`toggle ${settings.occupiedSec8Only ? 'active' : ''}`}
                             />
                         </div>
+                    </div>
+                </section>
+
+                {/* Market Status Section */}
+                <section className="card mb-6">
+                    <h2 className="text-xl font-bold mb-6">🏠 Market Status</h2>
+                    <div className="flex items-center justify-between p-4 bg-[var(--background)] rounded-lg">
+                        <div>
+                            <p className="font-medium">Enable Market Status Checking</p>
+                            <p className="text-sm text-[var(--muted)]">
+                                Check if properties are sold/pending before underwriting
+                            </p>
+                            <p className="text-xs text-yellow-500 mt-1">
+                                ⚠️ Currently unreliable - requires API integration
+                            </p>
+                        </div>
+                        <button
+                            onClick={() => updateSetting('marketStatusEnabled', !settings.marketStatusEnabled)}
+                            className={`toggle ${settings.marketStatusEnabled ? 'active' : ''}`}
+                        />
                     </div>
                 </section>
 

@@ -124,7 +124,7 @@ export function getFilterReasons(
     if (
         property.askingPrice !== null &&
         property.suggestedOffer !== null &&
-        settings.offerGapThreshold > 0
+        settings.offerGapThreshold >= 0
     ) {
         const gap = property.askingPrice - property.suggestedOffer;
         if (gap > settings.offerGapThreshold) {
@@ -198,6 +198,7 @@ export function getDefaultSettings(): Settings {
         chunkSizePages: 5,
         maxChunkSizeMB: 10,
         enableLLMFallback: false,
+        marketStatusEnabled: false,  // Disabled - use manual MCP workflow for checking Zillow
     };
 }
 

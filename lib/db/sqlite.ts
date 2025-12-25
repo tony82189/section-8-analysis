@@ -41,6 +41,7 @@ function initializeSchema(database: Database.Database): void {
       properties_extracted INTEGER,
       properties_filtered INTEGER,
       properties_deduped INTEGER,
+      properties_unavailable INTEGER,
       properties_analyzed INTEGER,
       top_n_count INTEGER,
       error TEXT,
@@ -168,7 +169,7 @@ export function updateRun(id: string, updates: Partial<Run>): Run | null {
     const allowedFields = [
         'status', 'current_step', 'progress', 'total_pages', 'chunks_created',
         'properties_extracted', 'properties_filtered', 'properties_deduped',
-        'properties_analyzed', 'top_n_count', 'error', 'started_at', 'completed_at'
+        'properties_unavailable', 'properties_analyzed', 'top_n_count', 'error', 'started_at', 'completed_at'
     ];
 
     const fieldMap: Record<string, string> = {
@@ -180,6 +181,7 @@ export function updateRun(id: string, updates: Partial<Run>): Run | null {
         propertiesExtracted: 'properties_extracted',
         propertiesFiltered: 'properties_filtered',
         propertiesDeduped: 'properties_deduped',
+        propertiesUnavailable: 'properties_unavailable',
         propertiesAnalyzed: 'properties_analyzed',
         topNCount: 'top_n_count',
         error: 'error',
@@ -230,6 +232,83 @@ export function listRuns(options: { limit?: number; offset?: number; status?: Ru
     return rows.map(mapRunRow);
 }
 
+export function deleteRun(id: string): boolean {
+    const db = getDatabase();
+
+    // Check if run exists
+    const run = getRun(id);
+    if (!run) return false;
+
+    // Delete in order of foreign key dependencies
+    db.prepare('DELETE FROM analysis WHERE run_id = ?').run(id);
+    db.prepare('DELETE FROM properties WHERE run_id = ?').run(id);
+    db.prepare('DELETE FROM artifacts WHERE run_id = ?').run(id);
+    db.prepare('DELETE FROM property_cache WHERE run_id = ?').run(id);
+    db.prepare('DELETE FROM runs WHERE id = ?').run(id);
+
+    return true;
+}
+
+export function deleteAllRuns(): { deletedCount: number; runIds: string[] } {
+    const db = getDatabase();
+
+    // Get all run IDs first (for file cleanup)
+    const runs = db.prepare('SELECT id FROM runs').all() as { id: string }[];
+    const runIds = runs.map(r => r.id);
+
+    if (runIds.length === 0) {
+        return { deletedCount: 0, runIds: [] };
+    }
+
+    // Delete all data in order of foreign key dependencies
+    db.prepare('DELETE FROM analysis').run();
+    db.prepare('DELETE FROM properties').run();
+    db.prepare('DELETE FROM artifacts').run();
+    db.prepare('DELETE FROM property_cache').run();
+    db.prepare('DELETE FROM runs').run();
+
+    return { deletedCount: runIds.length, runIds };
+}
+
+export function clearPropertiesForRun(runId: string): { deletedCount: number } {
+    const db = getDatabase();
+
+    // Check if run exists
+    const run = getRun(runId);
+    if (!run) {
+        return { deletedCount: 0 };
+    }
+
+    // Delete analysis records first (foreign key dependency)
+    db.prepare('DELETE FROM analysis WHERE run_id = ?').run(runId);
+
+    // Delete properties and get count
+    const result = db.prepare('DELETE FROM properties WHERE run_id = ?').run(runId);
+
+    // Clear property cache for this run
+    db.prepare('DELETE FROM property_cache WHERE run_id = ?').run(runId);
+
+    // Reset run counters and status to allow re-extraction
+    db.prepare(`
+        UPDATE runs SET
+            properties_extracted = NULL,
+            properties_filtered = NULL,
+            properties_deduped = NULL,
+            properties_unavailable = NULL,
+            properties_analyzed = NULL,
+            top_n_count = NULL,
+            status = 'pending',
+            current_step = NULL,
+            progress = 0,
+            error = NULL,
+            started_at = NULL,
+            completed_at = NULL
+        WHERE id = ?
+    `).run(runId);
+
+    return { deletedCount: result.changes };
+}
+
 function mapRunRow(row: Record<string, unknown>): Run {
     return {
         id: row.id as string,
@@ -246,6 +325,7 @@ function mapRunRow(row: Record<string, unknown>): Run {
         propertiesExtracted: row.properties_extracted as number | null,
         propertiesFiltered: row.properties_filtered as number | null,
         propertiesDeduped: row.properties_deduped as number | null,
+        propertiesUnavailable: row.properties_unavailable as number | null,
         propertiesAnalyzed: row.properties_analyzed as number | null,
         topNCount: row.top_n_count as number | null,
         error: row.error as string | null,
@@ -601,6 +681,23 @@ export function updateProperty(id: string, updates: Partial<Property>): Property
     stmt.run(JSON.stringify(newData), now, id);
 
     return newData;
+}
+
+export type MarketStatus = 'active' | 'pending' | 'sold' | 'off-market' | 'unknown';
+export type AvailabilitySource = 'zillow' | 'web-search' | 'manual' | 'claude-import' | 'none';
+
+export function updatePropertyStatus(
+    id: string,
+    status: MarketStatus,
+    source: AvailabilitySource = 'manual'
+): Property | null {
+    const now = new Date().toISOString();
+
+    return updateProperty(id, {
+        zillowStatus: status,
+        availabilitySource: source,
+        zillowLastChecked: now,
+    });
 }
 
 // ============================================================================

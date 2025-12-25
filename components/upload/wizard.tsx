@@ -117,15 +117,13 @@ export default function UploadWizard({ onComplete }: UploadWizardProps) {
                 throw new Error(result.error || 'Upload failed');
             }
 
-            // Immediately switch to polling
-            setState(prev => ({
-                ...prev,
-                step: 'processing',
+            // Close modal immediately after upload starts
+            // Progress will be shown inline in the dashboard runs table
+            onComplete({
                 runId: result.data.runId,
-                progress: 5,
-                progressMessage: 'Initializing pipeline...',
-                propertiesExtracted: 0,
-            }));
+                status: 'started',
+                message: 'Processing started - check dashboard for progress',
+            });
 
         } catch (err) {
             const message = err instanceof Error ? err.message : 'An error occurred';

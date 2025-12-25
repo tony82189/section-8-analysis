@@ -142,7 +142,7 @@ export function normalizeZillowUrl(url: string | null): string | null {
 }
 
 /**
- * Deduplicate properties against existing records
+ * Deduplicate properties against existing records (across all runs)
  */
 export function deduplicateProperties(
     properties: Property[],
@@ -179,7 +179,7 @@ export function deduplicateProperties(
             zillowDupes++;
         }
 
-        // Check against database if enabled
+        // Check against database if enabled (across all runs)
         if (!isDuplicate && checkDatabase) {
             if (normalizedAddress) {
                 const existingId = findDuplicateByAddress(normalizedAddress);
@@ -246,7 +246,7 @@ export function deduplicateProperties(
 }
 
 /**
- * Check if a single property is a duplicate
+ * Check if a single property is a duplicate (across all runs)
  */
 export function isDuplicate(property: Property): {
     isDuplicate: boolean;

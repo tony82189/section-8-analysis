@@ -2,23 +2,32 @@
   "name": "section8-analyzer",
   "version": "0.1.0",
   "private": true,
+  "bin": {
+    "section8-mcp": "./dist/mcp-server/index.js"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:ui": "playwright test --ui",
+    "build:mcp": "tsc -p mcp-server/tsconfig.json"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.25.1",
     "better-sqlite3": "^12.5.0",
     "bullmq": "^5.66.2",
     "crypto-js": "^4.2.0",
     "date-fns": "^4.1.0",
     "googleapis": "^169.0.0",
     "ioredis": "^5.8.2",
+    "jspdf": "^3.0.4",
     "next": "16.1.0",
     "openai": "^6.15.0",
     "pdf-lib": "^1.17.1",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse": "^1.1.4",
     "pdfjs-dist": "^5.4.449",
     "playwright": "^1.57.0",
     "react": "19.2.3",
@@ -29,6 +38,7 @@
     "zod": "^4.2.1"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "@tailwindcss/postcss": "^4",
     "@types/better-sqlite3": "^7.6.13",
     "@types/crypto-js": "^4.2.2",

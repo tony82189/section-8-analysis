@@ -20,11 +20,15 @@ export const PropertySchema = z.object({
 
   // Property details
   rent: z.number().positive().nullable(),
+  rentMin: z.number().positive().nullable().optional(),
+  rentMax: z.number().positive().nullable().optional(),
   bedrooms: z.number().int().min(0).nullable(),
   bathrooms: z.number().min(0).nullable(),
   sqft: z.number().positive().nullable(),
   yearBuilt: z.number().int().min(1800).max(2030).nullable(),
   arv: z.number().positive().nullable(),
+  arvMin: z.number().positive().nullable().optional(),
+  arvMax: z.number().positive().nullable().optional(),
   rehabNeeded: z.number().min(0).nullable(),
 
   // Occupancy
@@ -36,6 +40,11 @@ export const PropertySchema = z.object({
   zillowStatus: z.enum(['active', 'pending', 'sold', 'off-market', 'unknown', 'needs-review']).nullable(),
   zillowZestimate: z.number().positive().nullable(),
   zillowLastChecked: z.string().datetime().nullable(),
+
+  // Availability tracking
+  isOffMarketDeal: z.boolean().default(false),  // True if PDF says "OFF MARKET" (special deal)
+  availabilitySource: z.enum(['zillow', 'web-search', 'manual', 'claude-import', 'none']).nullable(),  // How availability was checked
+  availabilityDetails: z.string().nullable(),  // e.g., "Sold on 12/8/2024"
 
   // Processing status
   status: z.enum(['raw', 'filtered', 'deduped', 'reviewed', 'analyzed', 'discarded']),
@@ -133,6 +142,7 @@ export const RunStatusSchema = z.enum([
   'parsing',
   'filtering',
   'deduping',
+  'checking-availability',
   'checking-zillow',
   'underwriting',
   'forecasting',
@@ -164,6 +174,7 @@ export const RunSchema = z.object({
   propertiesExtracted: z.number().nullable(),
   propertiesFiltered: z.number().nullable(),
   propertiesDeduped: z.number().nullable(),
+  propertiesUnavailable: z.number().nullable(),  // Count of sold/pending/off-market
   propertiesAnalyzed: z.number().nullable(),
   topNCount: z.number().nullable(),
 
@@ -224,6 +235,9 @@ export const SettingsSchema = z.object({
   enableLLMFallback: z.boolean().default(false),
   llmProvider: z.enum(['openai', 'anthropic', 'google']).optional(),
   llmApiKey: z.string().optional(),
+
+  // Market status checking - disabled by default (use manual MCP workflow)
+  marketStatusEnabled: z.boolean().default(false),
 });
 
 export type Settings = z.infer<typeof SettingsSchema>;

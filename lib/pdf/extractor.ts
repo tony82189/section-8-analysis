@@ -131,12 +131,12 @@ export async function hasSelectableText(pdfBuffer: Buffer): Promise<boolean> {
         const text = data.text || '';
 
         // Check if there's meaningful text content
-        // Threshold: at least 100 chars and some words (not just symbols/whitespace)
+        // Threshold: at least 50 chars and some words (not just symbols/whitespace)
         const cleanText = text.replace(/\s+/g, ' ').trim();
         const wordPattern = /[a-zA-Z]{2,}/g;
         const words = cleanText.match(wordPattern) || [];
 
-        return cleanText.length > 100 && words.length > 10;
+        return cleanText.length > 50 && words.length > 5;
     } catch {
         return false;
     }

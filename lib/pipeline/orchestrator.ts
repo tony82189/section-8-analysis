@@ -20,19 +20,21 @@ import { v4 as uuidv4 } from 'uuid';
 
 import { splitPdf, computeBufferHash } from '../pdf/splitter';
 import { extractTextFromBuffer, hasSelectableText } from '../pdf/extractor';
-import { extractPropertiesWithLLM } from '../llm/openai';
+import { extractPropertiesWithRetry, verifyExtractedProperties } from '../llm/openai';
 import { ocrPdfPage, pdfPageToImage, terminateOcrWorker } from '../ocr/tesseract';
-import { parsePropertiesFromText, normalizeOcrText } from '../parser/section8';
-import { filterProperties, mergeSettings, getDefaultSettings } from '../filter/engine';
+import { validatePropertyData } from '../validation/checker';
+import { parsePropertiesFromText, normalizeOcrText, extractAddressFromZillowUrl } from '../parser/section8';
+import { filterProperties, mergeSettings } from '../filter/engine';
 import { deduplicateProperties } from '../dedup/normalizer';
 import { checkZillowUrl, closeBrowser as closeZillowBrowser } from '../zillow/scraper';
+import { checkPropertyAvailability, closeSearchBrowser } from '../availability/checker';
 import { calculateUnderwriting } from '../underwriting/calculator';
 import { calculateForecastSummary } from '../forecast/projections';
 import { rankProperties } from '../ranking/scorer';
 import { generateReports, closeBrowser as closeReportBrowser } from '../reports/generator';
 import {
     createRun, updateRun, getRun,
-    createArtifact, listArtifacts,
+    createArtifact,
     saveProperties, saveAnalyses,
     getPropertiesByRunId,
 } from '../db/sqlite';
@@ -40,7 +42,7 @@ import * as sheets from '../sheets/client';
 
 import type {
     Property, Analysis, Run, Settings,
-    ChunkInfo, UnderwritingInput, ForecastInput
+    UnderwritingInput, ForecastInput
 } from '../types';
 import type { RankedProperty } from '../ranking/scorer';
 
@@ -84,17 +86,19 @@ export async function runPipeline(
     const chunksDir = path.join(runDir, 'chunks');
     const reportsDir = path.join(runDir, 'reports');
 
-    // Create run record
-    const run = createRun({
-        id: runId,
-        fileHash,
-        fileName,
-        fileSize: pdfBuffer.length,
-        dryRun,
-    });
+    // Only create run record if we don't already have one (passed via options.runId from upload route)
+    if (!options.runId) {
+        createRun({
+            id: runId,
+            fileHash,
+            fileName,
+            fileSize: pdfBuffer.length,
+            dryRun,
+        });
+    }
 
     const progress = (step: string, pct: number, msg: string) => {
-        updateRun(runId, { currentStep: step, progress: pct });
+        updateRun(runId, { currentStep: msg, progress: pct });
         onProgress?.(step, pct, msg);
     };
 
@@ -102,6 +106,30 @@ export async function runPipeline(
         // Ensure directories exist
         await fs.mkdir(chunksDir, { recursive: true });
         await fs.mkdir(reportsDir, { recursive: true });
+
+        // Initialize Google Sheets early for real-time streaming
+        let sheetsConnected = false;
+        if (process.env.GOOGLE_SPREADSHEET_ID) {
+            try {
+                const initialized = await sheets.initializeFromEnv();
+                sheetsConnected = initialized && sheets.isConnected();
+                if (sheetsConnected) {
+                    console.log('[Pipeline] Google Sheets connected - will stream properties in real-time');
+                    // Record the run in Sheets
+                    await sheets.appendRun({
+                        id: runId,
+                        fileHash,
+                        fileName,
+                        fileSize: pdfBuffer.length,
+                        status: 'extracting',
+                        dryRun,
+                        createdAt: new Date().toISOString(),
+                    });
+                }
+            } catch (err) {
+                console.warn('[Pipeline] Sheets initialization failed, continuing without:', err);
+            }
+        }
 
         // Save original PDF
         const originalPath = path.join(runDir, 'original.pdf');
@@ -136,82 +164,581 @@ export async function runPipeline(
         }
 
         // ========================================================================
-        // STEP 4: Text Extraction / OCR / LLM
+        // STEP 4: Text Extraction with Sliding Window
         // ========================================================================
         updateRun(runId, { status: 'extracting', currentStep: 'Extracting text from pages' });
         progress('extracting', 15, 'Extracting text from pages...');
 
-        let processedCount = 0;
         const allProperties: Partial<Property>[] = [];
-        const chunks = splitResult.chunks; // Use splitResult.chunks
-        const totalPages = splitResult.totalPages; // Use splitResult.totalPages
+        const chunks = splitResult.chunks;
+        const totalPages = splitResult.totalPages;
 
-        // Check if LLM is enabled
-        const useLLM = settings.enableLLMFallback || settings.llmProvider === 'openai';
+        // Check if LLM is enabled - auto-detect if OpenAI API key is available
+        const hasOpenAIKey = !!(process.env.OPENAI_API_KEY || settings.llmApiKey);
+        const useLLM = settings.enableLLMFallback || settings.llmProvider === 'openai' || hasOpenAIKey;
+
+        console.log(`[Pipeline] OpenAI check: hasKey=${hasOpenAIKey}, envKey=${!!process.env.OPENAI_API_KEY}, settingsKey=${!!settings.llmApiKey}, useLLM=${useLLM}`);
 
         // Create temp dir for OCR/Image processing
         const tempDir = path.join(runDir, 'temp');
         await fs.mkdir(tempDir, { recursive: true });
 
+        // ================================================================
+        // Phase 1: Extract raw text from ALL pages (fast pass)
+        // ================================================================
+        progress('extracting', 17, 'Extracting text from all pages...');
+        const pageTexts: Map<number, string> = new Map();
+        const pagesNeedingLLM: number[] = [];
+
         for (const chunk of chunks) {
-            processedCount++;
-            const chunkProgress = 15 + (processedCount / chunks.length) * 30; // 15% to 45%
-            progress('extracting', chunkProgress, `Processing page ${chunk.pageStart} of ${totalPages}...`);
-
             const chunkBuffer = await fs.readFile(chunk.path);
-
-            if (useLLM) {
-                try {
-                    // Convert first page of chunk to image (assuming 1 page per chunk for now)
-                    // If chunk has multiple pages, we might need to iterate.
-                    // Current splitter does 1 page per chunk if not specified,
-                    // but settings.chunkSizePages defaults to 5.
-                    // For LLM, we should process page by page.
-                    // But wait, the splitter made chunks.
-
-                    // We need to render the PDF chunk to images.
-                    // Since chunk is a valid PDF, we can render page 1 of it.
-                    // Let's use pdfPageToImage directly
-                    const imageResult = await pdfPageToImage(chunk.path, 1, tempDir);
-                    if (imageResult.success && imageResult.imagePath) {
-                        const imgBuffer = await fs.readFile(imageResult.imagePath);
-                        const { properties } = await extractPropertiesWithLLM(imgBuffer, chunk.pageStart);
-                        allProperties.push(...properties);
-
-                        // Cleanup
-                        await fs.unlink(imageResult.imagePath).catch(() => { });
-                    } else {
-                        console.error(`Failed to convert chunk ${chunk.id} to image for LLM`);
-                    }
-
-                } catch (err) {
-                    console.error('LLM extraction failed:', err);
-                    // Fallback?
-                }
-                continue; // Skip standard path
-            }
-
-            // Standard Path (Text/OCR + Regex)
-            let text = '';
             const hasText = await hasSelectableText(chunkBuffer);
 
             if (hasText) {
-                const extracted = await extractTextFromBuffer(chunkBuffer);
-                text = extracted.text;
-            } else {
-                // Fall back to OCR
-                const ocrResult = await ocrPdfPage(chunk.path, 1, tempDir);
-                if (ocrResult.success) {
-                    text = normalizeOcrText(ocrResult.text);
+                try {
+                    const extracted = await extractTextFromBuffer(chunkBuffer);
+                    if (extracted.text.length > 50) {
+                        pageTexts.set(chunk.pageStart, extracted.text);
+                    }
+                } catch (err) {
+                    console.error(`[Pipeline] Text extraction failed for page ${chunk.pageStart}:`, err);
                 }
             }
 
-            if (text.length > 50) {
-                const parseResult = parsePropertiesFromText(text, runId, {
-                    sourcePage: chunk.pageStart,
-                });
+            // Track pages without text for potential LLM fallback
+            if (!pageTexts.has(chunk.pageStart)) {
+                pagesNeedingLLM.push(chunk.pageStart);
+            }
+        }
 
-                allProperties.push(...parseResult.properties);
+        console.log(`[Pipeline] Extracted text from ${pageTexts.size} pages, ${pagesNeedingLLM.length} pages have no selectable text`);
+
+        // ================================================================
+        // Phase 2: Parse each page individually (FIRST PASS)
+        // This catches properties where all data is on the same page
+        // ================================================================
+        progress('extracting', 25, 'Parsing properties from pages...');
+        const allParsedProperties: Partial<Property>[] = [];
+        const pagesWithProperties = new Set<number>();
+        let processedCount = 0;
+
+        for (const chunk of chunks) {
+            processedCount++;
+            const chunkProgress = 25 + (processedCount / chunks.length) * 10; // 25% to 35%
+            progress('extracting', chunkProgress, `Parsing page ${chunk.pageStart} of ${totalPages}...`);
+
+            // Skip if this page has no text (will be handled by LLM later)
+            if (!pageTexts.has(chunk.pageStart)) continue;
+
+            const currText = pageTexts.get(chunk.pageStart) || '';
+            if (currText.trim().length < 100) continue;
+
+            const parseResult = parsePropertiesFromText(currText, runId, {
+                sourcePage: chunk.pageStart,
+            });
+
+            // Filter to properties that have pricing data
+            const pageProps = parseResult.properties.filter(p => p.askingPrice || p.rent);
+
+            if (pageProps.length > 0) {
+                pagesWithProperties.add(chunk.pageStart);
+                for (const prop of pageProps) {
+                    prop.id = uuidv4();
+                    prop.runId = runId;
+                    prop.status = 'raw';
+                    prop.sourcePage = chunk.pageStart;
+                    prop.createdAt = new Date().toISOString();
+                    prop.updatedAt = new Date().toISOString();
+                    allParsedProperties.push(prop);
+                }
+                console.log(`[Pipeline] Page ${chunk.pageStart}: Found ${pageProps.length} properties`);
+            }
+        }
+
+        console.log(`[Pipeline] First pass: ${allParsedProperties.length} properties from ${pagesWithProperties.size} pages`);
+
+        // ================================================================
+        // Phase 2b: Sliding window fallback for pages with NO properties
+        // This catches properties that span page boundaries (URL on prev page)
+        // ================================================================
+        progress('extracting', 36, 'Checking for page boundary properties...');
+        let windowCount = 0;
+
+        for (const chunk of chunks) {
+            // Skip if we already found properties on this page
+            if (pagesWithProperties.has(chunk.pageStart)) continue;
+            if (!pageTexts.has(chunk.pageStart)) continue;
+
+            const prevText = pageTexts.get(chunk.pageStart - 1) || '';
+            const currText = pageTexts.get(chunk.pageStart) || '';
+
+            // Only try sliding window if there's previous page text
+            if (!prevText) continue;
+
+            const windowText = prevText + '\n\n' + currText;
+
+            const parseResult = parsePropertiesFromText(windowText, runId, {
+                sourcePage: chunk.pageStart,
+            });
+
+            const pageProps = parseResult.properties.filter(p => p.askingPrice || p.rent);
+
+            // Filter to properties whose pricing data appears in CURRENT page (not previous)
+            // This ensures we don't count properties that fully belong to previous page
+            for (const prop of pageProps) {
+                // Check if this property's pricing appears in current page text
+                // Need to handle different price formats: $85k, $85,000, 85000, etc.
+                const priceMatchesInText = (price: number | null | undefined, text: string): boolean => {
+                    if (!price) return false;
+                    const textLower = text.toLowerCase();
+
+                    // Generate possible formats for this price
+                    const formats: string[] = [
+                        price.toString(),                          // 85000
+                        price.toLocaleString(),                    // 85,000
+                        `$${price.toString()}`,                    // $85000
+                        `$${price.toLocaleString()}`,              // $85,000
+                    ];
+
+                    // Add "k" suffix formats for prices >= 1000
+                    if (price >= 1000) {
+                        const inK = price / 1000;
+                        if (Number.isInteger(inK)) {
+                            formats.push(`${inK}k`);               // 85k
+                            formats.push(`$${inK}k`);              // $85k
+                        } else {
+                            // Handle non-round thousands like 39900 -> 39.9k
+                            const rounded = Math.round(inK * 10) / 10;
+                            formats.push(`${rounded}k`);           // 39.9k
+                            formats.push(`$${rounded}k`);          // $39.9k
+                        }
+                    }
+
+                    return formats.some(fmt => textLower.includes(fmt.toLowerCase()));
+                };
+
+                const pricingInCurrent = priceMatchesInText(prop.askingPrice, currText) ||
+                                          priceMatchesInText(prop.rent, currText);
+
+                if (pricingInCurrent) {
+                    // Check if we already have this property (by URL or address)
+                    const addrKey = prop.address?.toLowerCase().trim();
+                    const urlKey = prop.zillowUrl?.toLowerCase().trim();
+
+                    const isDuplicate = allParsedProperties.some(existing => {
+                        const existingAddr = existing.address?.toLowerCase().trim();
+                        const existingUrl = existing.zillowUrl?.toLowerCase().trim();
+                        return (addrKey && existingAddr === addrKey) ||
+                               (urlKey && existingUrl === urlKey);
+                    });
+
+                    if (!isDuplicate) {
+                        prop.id = uuidv4();
+                        prop.runId = runId;
+                        prop.status = 'raw';
+                        prop.sourcePage = chunk.pageStart;
+                        prop.createdAt = new Date().toISOString();
+                        prop.updatedAt = new Date().toISOString();
+                        const existingNotes = prop.reviewNotes || '';
+                        prop.reviewNotes = existingNotes
+                            ? `${existingNotes}; From page boundary (URL on prev page)`
+                            : 'From page boundary (URL on prev page)';
+
+                        allParsedProperties.push(prop);
+                        windowCount++;
+                        console.log(`[Pipeline] Page ${chunk.pageStart}: Found boundary property: ${prop.address || 'Unknown'}`);
+                    }
+                }
+            }
+        }
+
+        if (windowCount > 0) {
+            console.log(`[Pipeline] Sliding window found ${windowCount} additional boundary properties`);
+        }
+
+        console.log(`[Pipeline] Total after both passes: ${allParsedProperties.length} properties`);
+
+        // ================================================================
+        // Phase 2c: Forward Merge - Find missing askingPrice from NEXT page
+        // This handles: Page N has address+rent, Page N+1 has askingPrice
+        // ================================================================
+        progress('extracting', 37, 'Checking for forward page boundary data...');
+        let forwardMergeCount = 0;
+
+        for (const prop of allParsedProperties) {
+            // Only process properties that have rent but NO asking price
+            if (prop.askingPrice || !prop.rent) continue;
+            if (!prop.sourcePage) continue;
+
+            const nextPageNum = prop.sourcePage + 1;
+            const nextText = pageTexts.get(nextPageNum);
+            if (!nextText) continue;
+
+            // Look for asking price pattern in next page
+            const pricePatterns = [
+                /asking\s*(?:price)?[:\s]*\$?\s*([\d,]+(?:\.\d+)?)\s*k/i,
+                /price[:\s]*\$?\s*([\d,]+(?:\.\d+)?)\s*k/i,
+                /\$\s*([\d,]+(?:\.\d+)?)\s*k\b/i,
+                /asking\s*(?:price)?[:\s]*\$?\s*([\d,]+)/i,
+            ];
+
+            let foundPrice: number | null = null;
+            for (const pattern of pricePatterns) {
+                const match = nextText.match(pattern);
+                if (match) {
+                    let priceStr = match[1].replace(/,/g, '');
+                    let price = parseFloat(priceStr);
+
+                    // Handle "k" suffix (e.g., "85k" → 85000)
+                    if (pattern.source.includes('k') && price < 1000) {
+                        price *= 1000;
+                    }
+
+                    if (price > 0 && price < 10000000) {  // Sanity check
+                        foundPrice = price;
+                        break;
+                    }
+                }
+            }
+
+            if (foundPrice) {
+                prop.askingPrice = foundPrice;
+                const existingNotes = prop.reviewNotes || '';
+                prop.reviewNotes = existingNotes
+                    ? `${existingNotes}; Asking price merged from page ${nextPageNum}`
+                    : `Asking price merged from page ${nextPageNum}`;
+                forwardMergeCount++;
+                console.log(`[Pipeline] Forward merge: ${prop.address} got askingPrice $${foundPrice.toLocaleString()} from page ${nextPageNum}`);
+
+                // Re-run sanity check since property is now more complete
+                if (prop.needsManualReview) {
+                    const validation = validatePropertyData(prop);
+                    if (!validation.shouldFlag) {
+                        // Property is now valid, remove the review flag
+                        prop.needsManualReview = false;
+                        prop.reviewNotes = existingNotes
+                            ? `${existingNotes}; Asking price merged from page ${nextPageNum} (resolved)`
+                            : `Asking price merged from page ${nextPageNum}`;
+                    }
+                }
+            }
+        }
+
+        if (forwardMergeCount > 0) {
+            console.log(`[Pipeline] Forward merge found ${forwardMergeCount} asking prices from next pages`);
+        }
+
+        // ================================================================
+        // Phase 2d: Deduplicate (should be minimal - only actual duplicates in PDF)
+        // ================================================================
+        const seenAddresses = new Set<string>();
+        const seenUrls = new Set<string>();
+
+        for (const prop of allParsedProperties) {
+            const addrKey = prop.address?.toLowerCase().trim();
+            const urlKey = prop.zillowUrl?.toLowerCase().trim();
+
+            // Skip if we've already seen this property
+            if (addrKey && seenAddresses.has(addrKey)) continue;
+            if (urlKey && seenUrls.has(urlKey)) continue;
+
+            // Track for deduplication
+            if (addrKey) seenAddresses.add(addrKey);
+            if (urlKey) seenUrls.add(urlKey);
+
+            // Run sanity checks
+            const validation = validatePropertyData(prop);
+            if (validation.shouldFlag) {
+                prop.needsManualReview = true;
+                const existingNotes = prop.reviewNotes || '';
+                prop.reviewNotes = existingNotes
+                    ? `${existingNotes}; Sanity: ${validation.issues.join(', ')}`
+                    : `Sanity: ${validation.issues.join(', ')}`;
+                console.log(`[Pipeline] Property flagged: ${prop.address} - ${validation.issues.join(', ')}`);
+            }
+
+            allProperties.push(prop);
+        }
+
+        console.log(`[Pipeline] After dedup: ${allProperties.length} unique properties`);
+
+        // ================================================================
+        // Phase 2e: Generate page images for flagged properties
+        // This allows users to see the original PDF when reviewing
+        // ================================================================
+        const pagesWithFlaggedProperties = new Set<number>();
+        for (const prop of allProperties) {
+            if (prop.needsManualReview && prop.sourcePage) {
+                pagesWithFlaggedProperties.add(prop.sourcePage);
+            }
+        }
+
+        if (pagesWithFlaggedProperties.size > 0) {
+            console.log(`[Pipeline] Generating images for ${pagesWithFlaggedProperties.size} pages with flagged properties...`);
+            progress('extracting', 38, `Generating page images for review...`);
+
+            const imagesDir = path.join(runDir, 'images');
+            await fs.mkdir(imagesDir, { recursive: true });
+
+            for (const pageNum of pagesWithFlaggedProperties) {
+                // Find the chunk for this page
+                const chunk = chunks.find(c => c.pageStart === pageNum);
+                if (!chunk) continue;
+
+                // Skip if image already exists (may have been created during LLM phase)
+                const permanentPath = path.join(imagesDir, `page_${pageNum}.png`);
+                try {
+                    await fs.access(permanentPath);
+                    console.log(`[Pipeline] Image for page ${pageNum} already exists, skipping`);
+                    continue;
+                } catch {
+                    // File doesn't exist, create it
+                }
+
+                try {
+                    const imageResult = await pdfPageToImage(chunk.path, 1, imagesDir, { dpi: 150 });
+                    if (imageResult.success && imageResult.imagePath) {
+                        // Rename to standard naming convention
+                        await fs.rename(imageResult.imagePath, permanentPath).catch(async () => {
+                            // If rename fails (cross-device), try copy + delete
+                            await fs.copyFile(imageResult.imagePath!, permanentPath);
+                            await fs.unlink(imageResult.imagePath!).catch(() => {});
+                        });
+
+                        // Register as artifact
+                        createArtifact({
+                            runId,
+                            type: 'chunk-image',
+                            path: permanentPath,
+                            metadata: { pageNumber: pageNum },
+                        });
+
+                        console.log(`[Pipeline] Created image for page ${pageNum}`);
+                    }
+                } catch (err) {
+                    console.warn(`[Pipeline] Failed to create image for page ${pageNum}:`, err);
+                }
+            }
+        }
+
+        // Save properties in batch (after dedup)
+        if (allProperties.length > 0) {
+            saveProperties(allProperties as Property[]);
+
+            // Stream to Google Sheets in real-time (non-blocking)
+            if (sheetsConnected) {
+                sheets.appendProperties(allProperties).catch(err =>
+                    console.warn(`[Pipeline] Sheets append failed:`, err)
+                );
+            }
+        }
+
+        // Update count for real-time UI feedback
+        updateRun(runId, {
+            propertiesExtracted: allProperties.length,
+            currentStep: `Extracted ${allProperties.length} properties`,
+        });
+
+        // ================================================================
+        // Phase 3: LLM fallback for pages without any selectable text
+        // (scanned/image pages only - not for pages where parser found nothing)
+        // ================================================================
+        if (useLLM && pagesNeedingLLM.length > 0) {
+            console.log(`[Pipeline] Running LLM extraction on ${pagesNeedingLLM.length} pages without selectable text...`);
+
+            for (const pageNum of pagesNeedingLLM) {
+                const chunk = chunks.find(c => c.pageStart === pageNum);
+                if (!chunk) continue;
+
+                const chunkProgress = 40 + ((pagesNeedingLLM.indexOf(pageNum) + 1) / pagesNeedingLLM.length) * 5; // 40% to 45%
+                progress('extracting', chunkProgress, `LLM extracting page ${pageNum} of ${totalPages}...`);
+
+                try {
+                    // Convert PDF page to image for GPT-4o vision
+                    const imageResult = await pdfPageToImage(chunk.path, 1, tempDir);
+                    if (imageResult.success && imageResult.imagePath) {
+                        const imgBuffer = await fs.readFile(imageResult.imagePath);
+
+                        // Use retry-enabled extraction
+                        const { properties } = await extractPropertiesWithRetry(imgBuffer, pageNum);
+
+                        console.log(`[Pipeline] Page ${pageNum}: LLM extracted ${properties.length} properties`);
+
+                        const pageProperties: Partial<Property>[] = [];
+                        const flaggedForVerification: Partial<Property>[] = [];
+
+                        for (const prop of properties) {
+                            // Deduplicate against already extracted properties
+                            const addrKey = prop.address?.toLowerCase().trim();
+                            const urlKey = prop.zillowUrl?.toLowerCase().trim();
+
+                            if (addrKey && seenAddresses.has(addrKey)) continue;
+                            if (urlKey && seenUrls.has(urlKey)) continue;
+
+                            if (addrKey) seenAddresses.add(addrKey);
+                            if (urlKey) seenUrls.add(urlKey);
+
+                            prop.id = uuidv4();
+                            prop.runId = runId;
+                            prop.status = 'raw';
+                            prop.sourcePage = pageNum;
+                            prop.createdAt = new Date().toISOString();
+                            prop.updatedAt = new Date().toISOString();
+
+                            // Run sanity checks to catch obvious hallucinations
+                            const validation = validatePropertyData(prop);
+                            if (validation.shouldFlag) {
+                                prop.needsManualReview = true;
+                                const existingNotes = prop.reviewNotes || '';
+                                prop.reviewNotes = existingNotes
+                                    ? `${existingNotes}; Sanity: ${validation.issues.join(', ')}`
+                                    : `Sanity: ${validation.issues.join(', ')}`;
+                                flaggedForVerification.push(prop);
+                                console.log(`[Pipeline] Property flagged: ${prop.address} - ${validation.issues.join(', ')}`);
+                            }
+
+                            pageProperties.push(prop);
+                        }
+
+                        // Post-processing: Fill missing addresses from Zillow URLs
+                        for (const prop of pageProperties) {
+                            if (!prop.address && prop.zillowUrl) {
+                                const extracted = extractAddressFromZillowUrl(prop.zillowUrl);
+                                if (extracted.address) {
+                                    prop.address = extracted.address;
+                                    prop.city = prop.city || extracted.city;
+                                    prop.state = prop.state || extracted.state;
+                                    prop.zip = prop.zip || extracted.zip;
+                                    console.log(`[Pipeline] Extracted address from Zillow URL: ${prop.address}`);
+                                }
+                            }
+                        }
+
+                        // Run verification pass for flagged properties (max 5 to limit API costs)
+                        if (flaggedForVerification.length > 0 && flaggedForVerification.length <= 5) {
+                            console.log(`[Pipeline] Running verification pass for ${flaggedForVerification.length} flagged properties...`);
+                            try {
+                                const { corrections } = await verifyExtractedProperties(
+                                    flaggedForVerification,
+                                    imgBuffer,
+                                    pageNum
+                                );
+
+                                // Apply corrections
+                                for (const correction of corrections) {
+                                    const prop = pageProperties.find(p => p.address === correction.address);
+                                    if (prop && correction.field && correction.actual !== undefined) {
+                                        console.log(`[Pipeline] Correction applied: ${correction.address}.${correction.field}: ${correction.extracted} → ${correction.actual}`);
+                                        (prop as Record<string, unknown>)[correction.field] = correction.actual;
+                                        prop.reviewNotes = `${prop.reviewNotes || ''}; Corrected: ${correction.reason}`;
+                                    }
+                                }
+                            } catch (verifyErr) {
+                                console.error(`[Pipeline] Verification pass failed:`, verifyErr);
+                            }
+                        }
+
+                        // Save page image for later viewing (helps identify properties with missing addresses)
+                        if (imageResult.imagePath) {
+                            const imagesDir = path.join(runDir, 'images');
+                            await fs.mkdir(imagesDir, { recursive: true });
+                            const permanentImagePath = path.join(imagesDir, `page_${pageNum}.png`);
+                            const tempPath = imageResult.imagePath;
+                            await fs.rename(tempPath, permanentImagePath).catch(async () => {
+                                // If rename fails (cross-device), try copy + delete
+                                await fs.copyFile(tempPath, permanentImagePath);
+                                await fs.unlink(tempPath).catch(() => { });
+                            });
+
+                            // Register as artifact
+                            createArtifact({
+                                runId,
+                                type: 'chunk-image',
+                                path: permanentImagePath,
+                                metadata: { pageNumber: pageNum },
+                            });
+                        }
+
+                        // Save and update
+                        if (pageProperties.length > 0) {
+                            allProperties.push(...pageProperties);
+                            saveProperties(pageProperties as Property[]);
+
+                            if (sheetsConnected) {
+                                sheets.appendProperties(pageProperties).catch(err =>
+                                    console.warn(`[Pipeline] Sheets append failed for page ${pageNum}:`, err)
+                                );
+                            }
+                        }
+
+                        updateRun(runId, {
+                            propertiesExtracted: allProperties.length,
+                            currentStep: `Page ${pageNum}/${totalPages}: LLM found ${pageProperties.length} (${allProperties.length} total)`,
+                        });
+                    } else {
+                        console.error(`[Pipeline] Failed to convert page ${pageNum} to image`);
+                        updateRun(runId, {
+                            currentStep: `Page ${pageNum}/${totalPages}: Image conversion failed, skipping`,
+                        });
+                    }
+                } catch (err) {
+                    console.error(`[Pipeline] LLM extraction failed for page ${pageNum}:`, err);
+                    updateRun(runId, {
+                        currentStep: `Page ${pageNum}/${totalPages}: Extraction failed, continuing...`,
+                    });
+                }
+            }
+        }
+
+        // ================================================================
+        // Phase 4: OCR fallback for pages without text and without LLM
+        // ================================================================
+        if (!useLLM && pagesNeedingLLM.length > 0) {
+            console.log(`[Pipeline] Running OCR on ${pagesNeedingLLM.length} pages without selectable text...`);
+
+            for (const pageNum of pagesNeedingLLM) {
+                const chunk = chunks.find(c => c.pageStart === pageNum);
+                if (!chunk) continue;
+
+                try {
+                    const ocrResult = await ocrPdfPage(chunk.path, 1, tempDir);
+                    if (ocrResult.success) {
+                        const text = normalizeOcrText(ocrResult.text);
+
+                        if (text.length > 50) {
+                            const parseResult = parsePropertiesFromText(text, runId, {
+                                sourcePage: pageNum,
+                            });
+
+                            for (const prop of parseResult.properties) {
+                                // Deduplicate
+                                const addrKey = prop.address?.toLowerCase().trim();
+                                const urlKey = prop.zillowUrl?.toLowerCase().trim();
+
+                                if (addrKey && seenAddresses.has(addrKey)) continue;
+                                if (urlKey && seenUrls.has(urlKey)) continue;
+
+                                if (addrKey) seenAddresses.add(addrKey);
+                                if (urlKey) seenUrls.add(urlKey);
+
+                                prop.id = uuidv4();
+                                prop.runId = runId;
+                                prop.status = 'raw';
+                                prop.sourcePage = pageNum;
+                                prop.createdAt = new Date().toISOString();
+                                prop.updatedAt = new Date().toISOString();
+                                allProperties.push(prop);
+                            }
+
+                            if (parseResult.properties.length > 0) {
+                                console.log(`[Pipeline] Page ${pageNum}: OCR+Regex extracted ${parseResult.properties.length} properties`);
+                                saveProperties(parseResult.properties as Property[]);
+                            }
+                        }
+                    }
+                } catch (ocrErr) {
+                    console.error(`[Pipeline] OCR failed for page ${pageNum}:`, ocrErr);
+                }
             }
         }
 
@@ -243,9 +770,90 @@ export async function runPipeline(
 
         updateRun(runId, { propertiesDeduped: dedupResult.unique.length });
         progress('deduping', 65, `${dedupResult.unique.length} unique properties after dedup`);
-        saveProperties(dedupResult.unique);
 
-        // Stop if extract-only or dry-run
+        // Save both unique and duplicate properties to database
+        // Unique properties have status='deduped', duplicates have status='discarded'
+        saveProperties(dedupResult.unique);
+        if (dedupResult.duplicates.length > 0) {
+            saveProperties(dedupResult.duplicates);
+        }
+
+        // ========================================================================
+        // STEP 6: Check ALL properties for availability (BEFORE review)
+        // Only run if marketStatusEnabled is true
+        // ========================================================================
+        const dedupedProperties = dedupResult.unique;
+        let unavailableCount = 0;
+
+        if (settings.marketStatusEnabled) {
+            progress('checking-availability', 67, 'Checking property availability...');
+            updateRun(runId, { status: 'checking-availability' });
+
+            for (let i = 0; i < dedupedProperties.length; i++) {
+                const property = dedupedProperties[i];
+                const availProgress = 67 + (i / dedupedProperties.length) * 10;
+                progress('checking-availability', availProgress,
+                    `Checking ${i + 1}/${dedupedProperties.length}: ${property.address || 'Unknown'}`);
+
+                try {
+                    const result = await checkPropertyAvailability(
+                        property.zillowUrl,
+                        property.address,
+                        property.city,
+                        property.state
+                    );
+
+                    // Update property with availability data
+                    property.zillowStatus = result.status;
+                    property.zillowLastChecked = result.lastChecked;
+                    property.availabilitySource = result.source;
+                    property.availabilityDetails = result.details || null;
+
+                    // If we got Zillow data, update additional fields
+                    if (result.zillowData) {
+                        property.zillowZestimate = result.zillowData.zestimate;
+                        if (result.zillowData.beds && !property.bedrooms) property.bedrooms = result.zillowData.beds;
+                        if (result.zillowData.baths && !property.bathrooms) property.bathrooms = result.zillowData.baths;
+                        if (result.zillowData.sqft && !property.sqft) property.sqft = result.zillowData.sqft;
+                        if (result.zillowData.yearBuilt && !property.yearBuilt) property.yearBuilt = result.zillowData.yearBuilt;
+                    }
+
+                    // Track unavailable count
+                    if (result.status === 'sold' || result.status === 'pending' || result.status === 'off-market') {
+                        if (!property.isOffMarketDeal) {
+                            unavailableCount++;
+                        }
+                    }
+
+                    console.log(`[Pipeline] ${property.address}: ${result.status} (source: ${result.source})`);
+                } catch (err) {
+                    console.error(`[Pipeline] Availability check failed for ${property.address}:`, err);
+                    property.zillowStatus = 'needs-review';
+                    property.availabilitySource = 'none';
+                }
+            }
+
+            // Save updated properties with availability data
+            saveProperties(dedupedProperties);
+
+            console.log(`[Pipeline] Availability check complete: ${unavailableCount}/${dedupedProperties.length} properties not available`);
+            updateRun(runId, {
+                propertiesUnavailable: unavailableCount,
+                currentStep: `${unavailableCount} of ${dedupedProperties.length} properties not available (sold/pending)`,
+            });
+
+            progress('checking-availability', 77, `${unavailableCount} properties not available`);
+        } else {
+            console.log('[Pipeline] Market status check disabled, skipping...');
+            // Clear any previous availability data
+            for (const property of dedupedProperties) {
+                property.zillowStatus = null;
+                property.availabilitySource = null;
+            }
+            saveProperties(dedupedProperties);
+        }
+
+        // Stop if extract-only or dry-run - pause for user review
         if (dryRun || targetStage === 'extract-only') {
             updateRun(runId, {
                 status: 'waiting-for-review',
@@ -256,48 +864,52 @@ export async function runPipeline(
                 success: true,
                 runId,
                 run: getRun(runId)!,
-                properties: dedupResult.unique,
+                properties: dedupedProperties,
                 analyses: [],
                 ranked: [],
             };
         }
 
         // ========================================================================
-        // STEP 6: Zillow Checks (optional, slow)
+        // STEP 7: Filter out unavailable properties before underwriting
+        // Only applies if market status checking is enabled
         // ========================================================================
-        const propertiesToAnalyze = dedupResult.unique;
+        let propertiesToAnalyze = dedupedProperties;
 
-        if (propertiesToAnalyze.some(p => p.zillowUrl && !p.zillowStatus)) {
-            progress('checking-zillow', 67, 'Checking Zillow status...');
-            updateRun(runId, { status: 'checking-zillow' });
+        if (settings.marketStatusEnabled) {
+            const availableProperties = dedupedProperties.filter(p => {
+                const status = p.zillowStatus;
 
-            for (let i = 0; i < propertiesToAnalyze.length; i++) {
-                const property = propertiesToAnalyze[i];
-
-                if (property.zillowUrl && !property.zillowStatus) {
-                    const zillowProgress = 67 + (i / propertiesToAnalyze.length) * 8;
-                    progress('checking-zillow', zillowProgress, `Checking Zillow ${i + 1}/${propertiesToAnalyze.length}...`);
-
-                    try {
-                        const result = await checkZillowUrl(property.zillowUrl);
-                        property.zillowStatus = result.status;
-                        property.zillowZestimate = result.zestimate;
-                        property.zillowLastChecked = result.lastUpdated;
-
-                        // Update beds/baths if we got them from Zillow
-                        if (result.beds && !property.bedrooms) property.bedrooms = result.beds;
-                        if (result.baths && !property.bathrooms) property.bathrooms = result.baths;
-                        if (result.sqft && !property.sqft) property.sqft = result.sqft;
-                        if (result.yearBuilt && !property.yearBuilt) property.yearBuilt = result.yearBuilt;
-                    } catch {
-                        property.zillowStatus = 'needs-review';
-                    }
+                // Always allow off-market deals from PDF (special opportunities)
+                if (p.isOffMarketDeal) {
+                    console.log(`[Pipeline] ${p.address}: Off-market deal - proceeding to underwriting`);
+                    return true;
                 }
-            }
+
+                // Exclude sold, pending, off-market (unless isOffMarketDeal)
+                if (status === 'sold' || status === 'pending' || status === 'off-market') {
+                    console.log(`[Pipeline] ${p.address}: Excluded - ${status}`);
+                    p.status = 'discarded';
+                    p.discardReason = `Property ${status} - not available`;
+                    return false;
+                }
+
+                // Allow: active, unknown, needs-review, null
+                return true;
+            });
+
+            const excludedCount = dedupedProperties.length - availableProperties.length;
+            console.log(`[Pipeline] ${availableProperties.length} available, ${excludedCount} excluded (sold/pending)`);
+            updateRun(runId, { currentStep: `${availableProperties.length} properties available for underwriting` });
+
+            // Save discarded status
+            saveProperties(dedupedProperties);
+
+            propertiesToAnalyze = availableProperties;
         }
 
         // ========================================================================
-        // STEP 7 & 8: Underwriting and Forecasts
+        // STEP 8 & 9: Underwriting and Forecasts
         // ========================================================================
         progress('underwriting', 75, 'Running underwriting analysis...');
         updateRun(runId, { status: 'underwriting' });
@@ -479,7 +1091,7 @@ export async function resumePipeline(
     const settings = mergeSettings(options.settings || {});
 
     const progress = (step: string, pct: number, msg: string) => {
-        updateRun(runId, { currentStep: step, progress: pct });
+        updateRun(runId, { currentStep: msg, progress: pct });
         onProgress?.(step, pct, msg);
     };
 
@@ -522,42 +1134,37 @@ export async function resumePipeline(
         // For now, just implement steps 6-10 again
 
         // ========================================================================
-        // STEP 6: Zillow Checks
+        // STEP 6: Filter out unavailable properties before underwriting
+        // (Availability was already checked in Phase 1, if enabled)
         // ========================================================================
-        const propertiesToAnalyze = filterResult.passed;
+        const filteredProperties = filterResult.passed;
+        let propertiesToAnalyze = filteredProperties;
 
-        if (propertiesToAnalyze.some(p => p.zillowUrl && !p.zillowStatus)) {
-            progress('checking-zillow', 67, 'Checking Zillow status...');
-            updateRun(runId, { status: 'checking-zillow' });
+        if (settings.marketStatusEnabled) {
+            const availableProperties = filteredProperties.filter(p => {
+                const status = p.zillowStatus;
 
-            for (let i = 0; i < propertiesToAnalyze.length; i++) {
-                const property = propertiesToAnalyze[i];
-
-                if (property.zillowUrl && !property.zillowStatus) {
-                    const zillowProgress = 67 + (i / propertiesToAnalyze.length) * 8;
-                    progress('checking-zillow', zillowProgress, `Checking Zillow ${i + 1}/${propertiesToAnalyze.length}...`);
-
-                    try {
-                        const result = await checkZillowUrl(property.zillowUrl);
-                        property.zillowStatus = result.status;
-                        property.zillowZestimate = result.zestimate;
-                        property.zillowLastChecked = result.lastUpdated;
-
-                        // Update in DB too so we don't re-check next time?
-                        // Yes, updateProperty(property.id, ...)
-                        // Update beds/baths if we got them from Zillow
-                        if (result.beds && !property.bedrooms) property.bedrooms = result.beds;
-                        if (result.baths && !property.bathrooms) property.bathrooms = result.baths;
-                        if (result.sqft && !property.sqft) property.sqft = result.sqft;
-                        if (result.yearBuilt && !property.yearBuilt) property.yearBuilt = result.yearBuilt;
-
-                        // Persist Zillow updates
-                        // updateProperty(property.id, { ... }); // Needed? Yes.
-                    } catch {
-                        property.zillowStatus = 'needs-review';
-                    }
+                // Always allow off-market deals from PDF (special opportunities)
+                if (p.isOffMarketDeal) {
+                    console.log(`[Pipeline] ${p.address}: Off-market deal - proceeding to underwriting`);
+                    return true;
                 }
-            }
+
+                // Exclude sold, pending, off-market (unless isOffMarketDeal)
+                if (status === 'sold' || status === 'pending' || status === 'off-market') {
+                    console.log(`[Pipeline] ${p.address}: Excluded - ${status}`);
+                    return false;
+                }
+
+                // Allow: active, unknown, needs-review, null
+                return true;
+            });
+
+            const excludedCount = filteredProperties.length - availableProperties.length;
+            console.log(`[Pipeline] ${availableProperties.length} available, ${excludedCount} excluded (sold/pending)`);
+            progress('filtering', 70, `${availableProperties.length} properties available for underwriting (${excludedCount} excluded)`);
+
+            propertiesToAnalyze = availableProperties;
         }
 
         // ========================================================================
@@ -732,5 +1339,6 @@ export async function resumePipeline(
 export async function cleanup(): Promise<void> {
     await terminateOcrWorker();
     await closeZillowBrowser();
+    await closeSearchBrowser();
     await closeReportBrowser();
 }

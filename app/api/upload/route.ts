@@ -2,11 +2,35 @@ import { NextRequest, NextResponse } from 'next/server';
 import { runPipeline } from '@/lib/pipeline/orchestrator';
 import { mergeSettings, getDefaultSettings } from '@/lib/filter/engine';
 import { v4 as uuidv4 } from 'uuid';
-import { createRun } from '@/lib/db/sqlite';
+import { createRun, getAllSettings } from '@/lib/db/sqlite';
 import { computeBufferHash } from '@/lib/pdf/splitter';
+import type { Settings } from '@/lib/types';
 
 // Use require for pdf-parse to avoid ESM issues
 const pdfParse = require('pdf-parse');
+
+/**
+ * Load saved settings from database (same pattern as GET /api/settings)
+ */
+function loadSavedSettings(): Partial<Settings> {
+    const stored = getAllSettings();
+    const defaults = getDefaultSettings();
+    const parsed: Partial<Settings> = {};
+
+    for (const [key, value] of Object.entries(stored)) {
+        if (key in defaults) {
+            const defaultValue = (defaults as Record<string, unknown>)[key];
+            if (typeof defaultValue === 'number') {
+                parsed[key as keyof Settings] = parseFloat(value) as never;
+            } else if (typeof defaultValue === 'boolean') {
+                parsed[key as keyof Settings] = (value === 'true') as never;
+            } else {
+                parsed[key as keyof Settings] = value as never;
+            }
+        }
+    }
+    return parsed;
+}
 
 export async function POST(request: NextRequest) {
     try {
@@ -30,10 +54,10 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // Parse settings if provided
+        // Parse settings: use provided JSON, OR load from DB, OR use defaults
         const settings = settingsJson
             ? mergeSettings(JSON.parse(settingsJson))
-            : getDefaultSettings();
+            : mergeSettings(loadSavedSettings());
 
         // Read file buffer
         const arrayBuffer = await file.arrayBuffer();

@@ -115,6 +115,43 @@ export async function ocrFromFile(
     }
 }
 
+// Common paths where pdftoppm might be installed
+const PDFTOPPM_PATHS = [
+    '/opt/homebrew/bin/pdftoppm', // Homebrew on Apple Silicon (check first - most likely)
+    '/opt/homebrew/Cellar/poppler/25.12.0/bin/pdftoppm', // Direct Cellar path
+    '/usr/local/bin/pdftoppm', // Homebrew on Intel Mac
+    '/usr/bin/pdftoppm', // Linux system install
+    'pdftoppm', // Try PATH last
+];
+
+const CONVERT_PATHS = [
+    '/opt/homebrew/bin/convert', // Homebrew on Apple Silicon
+    '/usr/local/bin/convert', // Homebrew on Intel Mac
+    '/usr/bin/convert', // Linux system install
+    'convert', // Try PATH last
+];
+
+/**
+ * Find the first available command from a list of paths
+ */
+async function findCommand(paths: string[]): Promise<string | null> {
+    for (const cmdPath of paths) {
+        try {
+            // Check if the command exists by checking the file
+            if (cmdPath.startsWith('/')) {
+                await fs.access(cmdPath);
+                return cmdPath;
+            }
+            // For commands in PATH, try `which`
+            await execAsync(`which ${cmdPath}`, { timeout: 2000 });
+            return cmdPath;
+        } catch {
+            // Try next path
+        }
+    }
+    return null;
+}
+
 /**
  * Convert a PDF page to an image using ImageMagick/GraphicsMagick or pdftoppm
  * Returns the path to the generated image
@@ -133,29 +170,35 @@ export async function pdfPageToImage(
         await fs.mkdir(outputDir, { recursive: true });
 
         // Try pdftoppm first (usually available on Linux/Mac with poppler-utils)
-        try {
-            const pageArg = pageNumber.toString();
-            await execAsync(
-                `pdftoppm -${format} -r ${dpi} -f ${pageArg} -l ${pageArg} -singlefile "${pdfPath}" "${outputPath.replace(`.${format}`, '')}"`
-            );
+        const pdftoppmCmd = await findCommand(PDFTOPPM_PATHS);
+        if (pdftoppmCmd) {
+            try {
+                const pageArg = pageNumber.toString();
+                const outputBase = outputPath.replace(`.${format}`, '');
+                const cmd = `"${pdftoppmCmd}" -${format} -r ${dpi} -f ${pageArg} -l ${pageArg} -singlefile "${pdfPath}" "${outputBase}"`;
+                await execAsync(cmd);
 
-            // pdftoppm adds its own extension
-            const actualPath = outputPath;
-            await fs.access(actualPath);
-            return { success: true, imagePath: actualPath };
-        } catch {
-            // pdftoppm not available, try alternative
+                // pdftoppm adds its own extension
+                await fs.access(outputPath);
+                return { success: true, imagePath: outputPath };
+            } catch (err) {
+                console.error(`pdftoppm failed:`, err);
+                // Fall through to try convert
+            }
         }
 
         // Try convert (ImageMagick)
-        try {
-            await execAsync(
-                `convert -density ${dpi} "${pdfPath}[${pageNumber - 1}]" -quality 100 "${outputPath}"`
-            );
-            await fs.access(outputPath);
-            return { success: true, imagePath: outputPath };
-        } catch {
-            // convert not available
+        const convertCmd = await findCommand(CONVERT_PATHS);
+        if (convertCmd) {
+            try {
+                await execAsync(
+                    `"${convertCmd}" -density ${dpi} "${pdfPath}[${pageNumber - 1}]" -quality 100 "${outputPath}"`
+                );
+                await fs.access(outputPath);
+                return { success: true, imagePath: outputPath };
+            } catch (err) {
+                console.error(`convert failed:`, err);
+            }
         }
 
         return {
